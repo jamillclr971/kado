@@ -21,6 +21,7 @@
     scan: '<path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/>',
     image: '<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="9" cy="10" r="1.6"/><path d="m4 17 5-5 4 4 2-2 5 5"/>',
     x: '<path d="m6 6 12 12M18 6 6 18"/>',
+    file: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/>',
     gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'
   };
   const ic = (n, cls = '') => `<svg class="i ${cls}" viewBox="0 0 24 24" aria-hidden="true">${P[n]}</svg>`;
@@ -144,7 +145,7 @@
 
   /* ---------- Pages empilées (bouton Retour Android géré) ---------- */
   const pages = [];
-  let ignorePop = false;
+  let ignorePop = 0;
   function openPage(html, cls = '') {
     const el = document.createElement('section');
     el.className = 'page ' + cls;
@@ -160,10 +161,10 @@
     if (el._cleanup) try { el._cleanup(); } catch { /* ignore */ }
     el.classList.remove('in');
     setTimeout(() => el.remove(), 280);
-    if (!viaPop) { ignorePop = true; history.back(); }
+    if (!viaPop) { ignorePop++; history.back(); }
   }
   window.addEventListener('popstate', () => {
-    if (ignorePop) { ignorePop = false; return; }
+    if (ignorePop > 0) { ignorePop--; return; }
     if (pages.length) closePage(true);
   });
 
@@ -477,8 +478,10 @@
     const brands = [...new Set([...cards.map(x => x.brand), 'Amazon', 'Carrefour', 'Castorama', 'Leroy Merlin', 'Nike', 'Decathlon', 'Fnac', 'Galeries Lafayette', 'IKEA', 'Sephora', 'Zalando'])].sort((a, b) => a.localeCompare(b, 'fr'));
     const el = openPage(`
       <div class="bar-top"><button class="round" data-act="back" aria-label="Retour">${ic('back')}</button><h1>${edit ? 'Modifier la carte' : 'Nouvelle carte'}</h1><span class="round ph"></span></div>
+      ${edit ? '' : `<button class="src pdfsrc" data-act="pdf">${ic('file')}<span>Importer un PDF de bons d'achat<small>Tout est rempli automatiquement, même avec plusieurs bons</small></span></button>`}
       <div class="srcs"><button class="src" data-act="scan">${ic('scan')}Scanner</button><button class="src" data-act="pick">${ic('image')}Importer une image</button></div>
       <input type="file" id="file" accept="image/*" class="hidden">
+      <input type="file" id="pdfin" accept="application/pdf,.pdf" multiple class="hidden">
       <div id="thumb"></div>
       <div class="seg" id="kind"></div>
       <label class="f"><span>Enseigne *</span><input id="brand" list="brands" autocomplete="off" placeholder="Carrefour, Leroy Merlin…"><datalist id="brands">${brands.map(b => `<option value="${esc(b)}">`).join('')}</datalist></label>
@@ -504,7 +507,7 @@
     const renderThumb = () => {
       $('#thumb', el).innerHTML = c.image ? `<div class="thumb"><img src="${c.image}" alt=""><div>Image enregistrée avec la carte.${c.code.value ? '<br>Code lu : ' + esc(c.code.value) : ''}</div><button data-act="rmimg">Retirer</button></div>` : '';
     };
-    const sync = () => { g('brand').value = c.brand; g('cat').value = c.category || ''; g('exp').value = c.expiry || ''; g('num').value = c.number || ''; g('pin').value = c.pin || ''; g('code').value = c.code.value || ''; g('fmt').value = c.code.format || 'code_128'; g('notes').value = c.notes || ''; };
+    const sync = () => { g('brand').value = c.brand; g('cat').value = c.category || ''; g('exp').value = c.expiry || ''; g('num').value = c.number || ''; g('pin').value = c.pin || ''; g('code').value = c.code.value || ''; { const f = c.code.format || 'code_128'; if (!FORMATS.some(x => x[0] === f)) g('fmt').insertAdjacentHTML('beforeend', `<option value="${esc(f)}">${esc(f)}</option>`); g('fmt').value = f; } g('notes').value = c.notes || ''; };
     const read = () => { c.brand = g('brand').value.trim(); c.category = g('cat').value.trim(); c.expiry = g('exp').value; c.number = g('num').value.trim(); c.pin = g('pin').value.trim(); c.code = { value: g('code').value.trim(), format: g('fmt').value }; c.notes = g('notes').value.trim(); };
     renderKind(); renderThumb(); sync();
     const applyDetected = det => {
@@ -523,12 +526,16 @@
     if (pre.file) handleFile(pre.file);
     if (pre.file || pre.text) setTimeout(() => toast('Vérifie les champs préremplis'), 500);
 
-    el.addEventListener('change', e => { if (e.target.id === 'file') handleFile(e.target.files[0]); });
+    el.addEventListener('change', e => {
+      if (e.target.id === 'file') handleFile(e.target.files[0]);
+      if (e.target.id === 'pdfin' && e.target.files.length) { const fl = [...e.target.files]; e.target.value = ''; openPdfImport(fl, true); }
+    });
     el.addEventListener('click', async e => {
       const b = e.target.closest('[data-act]'); if (!b) return;
       switch (b.dataset.act) {
         case 'back': closePage(); break;
         case 'pick': g('file').click(); break;
+        case 'pdf': g('pdfin').click(); break;
         case 'scan': read(); openScanner(det => { applyDetected(det); toast('Code scanné'); }); break;
         case 'rmimg': c.image = ''; renderThumb(); break;
         case 'kind': read(); c.kind = b.dataset.k; renderKind(); break;
@@ -558,6 +565,95 @@
       }
     });
     return el;
+  }
+
+
+  /* ---------- Import PDF : lecture automatique + vérification ---------- */
+  function openPdfImport(files, closeParent) {
+    const el = openPage(`<div class="bar-top"><button class="round" data-act="back" aria-label="Retour">${ic('back')}</button><h1>Import PDF</h1><span class="round ph"></span></div><div class="block"><p id="prog" style="margin:0;font-weight:700">Lecture du PDF…</p><p class="note" style="margin:8px 0 0">La lecture se fait sur ton téléphone : le fichier n'est envoyé nulle part.</p></div>`);
+    let items = [];
+    let warnings = [];
+    const prog = m => { const p = $('#prog', el); if (p) p.textContent = m; };
+    const norm = x => String(x || '').replace(/\D/g, '');
+    const label = it => (it.code ? (FORMATS.find(f => f[0] === it.code.format) || [0, it.code.format])[1] : 'aucun code détecté');
+
+    const render = () => {
+      const n = items.filter(i => i.sel).length;
+      el.innerHTML = `<div class="bar-top"><button class="round" data-act="back" aria-label="Retour">${ic('back')}</button><h1>${items.length} bon${items.length > 1 ? 's' : ''} détecté${items.length > 1 ? 's' : ''}</h1><span class="round ph"></span></div>
+        ${warnings.map(w => `<div class="block warnbox">${esc(w)}</div>`).join('')}
+        <p class="note">Vérifie les informations lues dans le PDF, corrige si besoin, puis ajoute les cartes.</p>
+        ${items.map((it, i) => `<div class="block rv ${it.dup ? 'dup' : ''}" data-i="${i}">
+          <label class="rvhead"><input type="checkbox" data-f="sel" ${it.sel ? 'checked' : ''}>${logo({ brand: it.brand || '?' })}<span class="t"><b>${esc(it.brand || 'Enseigne à choisir')}</b><small>${it.dup ? 'Déjà dans Kado · ' : ''}${files.length > 1 ? esc(it.file) + ' · ' : ''}page ${it.page} · ${esc(label(it))}</small></span></label>
+          <div class="two"><label class="f"><span>Enseigne *</span><input data-f="brand" list="brands" value="${esc(it.brand)}" autocomplete="off"></label><label class="f"><span>Montant (€) *</span><input data-f="amount" inputmode="decimal" value="${it.amount != null ? String(it.amount).replace('.', ',') : ''}"></label></div>
+          <div class="two"><label class="f"><span>Validité</span><input data-f="expiry" type="date" value="${esc(it.expiry)}"></label><label class="f"><span>PIN</span><input data-f="pin" value="${esc(it.pin)}" autocomplete="off"></label></div>
+          <label class="f"><span>N° de carte</span><input data-f="number" value="${esc(it.number)}" autocomplete="off"></label>
+          ${it.image ? `<div class="rvimg"><img src="${it.image}" alt="Code lu dans le PDF"></div>` : ''}
+        </div>`).join('')}
+        <datalist id="brands">${[...new Set([...cards.map(c => c.brand), ...KadoPDF.KNOWN.map(k => k[0])])].map(b => `<option value="${esc(b)}">`).join('')}</datalist>
+        <button class="btn full" data-act="addall" ${n ? '' : 'disabled'}>Ajouter ${n} carte${n > 1 ? 's' : ''}</button>`;
+    };
+
+    el.addEventListener('input', e => {
+      const f = e.target.dataset.f, blk = e.target.closest('.rv'); if (!f || !blk) return;
+      const it = items[+blk.dataset.i];
+      if (f === 'sel') { it.sel = e.target.checked; const n = items.filter(i => i.sel).length; const b = $('[data-act="addall"]', el); b.textContent = `Ajouter ${n} carte${n > 1 ? 's' : ''}`; b.disabled = !n; return; }
+      it[f] = e.target.value;
+      if (f === 'brand') { const b = $('.rvhead b', blk); if (b) b.textContent = e.target.value || 'Enseigne à choisir'; }
+    });
+    el.addEventListener('change', e => { if (e.target.dataset.f === 'sel') e.target.dispatchEvent(new Event('input', { bubbles: true })); });
+    el.addEventListener('click', async e => {
+      const b = e.target.closest('[data-act]'); if (!b) return;
+      if (b.dataset.act === 'back') closePage();
+      if (b.dataset.act === 'addall') {
+        const sel = items.filter(i => i.sel);
+        for (const it of sel) {
+          const amount = parseAmount(it.amount);
+          if (!it.brand.trim() || !(amount > 0)) {
+            toast(!it.brand.trim() ? "Indique l'enseigne de chaque carte cochée" : 'Indique le montant de chaque carte cochée');
+            const blk = $(`.rv[data-i="${items.indexOf(it)}"]`, el); if (blk) blk.scrollIntoView({ block: 'center', behavior: 'smooth' });
+            return;
+          }
+          it._amount = amount;
+        }
+        b.disabled = true;
+        let k = 0;
+        for (const it of sel) {
+          await saveCard({
+            id: uid(), kind: 'cadeau', brand: it.brand.trim(), category: it.category || '', number: it.number.trim(), pin: (it.pin || '').trim(),
+            initial: it._amount, balance: it._amount, expiry: it.expiry || '', notes: '', image: it.image || '',
+            code: it.code || { value: norm(it.number), format: 'code_128' }, history: [], createdAt: Date.now() + k++
+          });
+          KadoPDF.rememberBin(norm(it.number), it.brand.trim());
+        }
+        closePage(); if (closeParent) closePage();
+        toast(`${sel.length} carte${sel.length > 1 ? 's' : ''} ajoutée${sel.length > 1 ? 's' : ''}`);
+      }
+    });
+
+    (async () => {
+      try {
+        for (let fi = 0; fi < files.length; fi++) {
+          const r = await KadoPDF.extract(files[fi], m => prog((files.length > 1 ? `Fichier ${fi + 1}/${files.length} : ` : '') + m));
+          warnings.push(...r.warnings.map(w => (files.length > 1 ? files[fi].name + ' : ' : '') + w));
+          items.push(...r.cards);
+        }
+        for (const it of items) {
+          it.dup = !!it.number && cards.some(c => norm(c.number) === norm(it.number));
+          it.sel = !it.dup;
+          it.amount = it.amount != null ? it.amount : '';
+        }
+        if (!items.length) {
+          el.innerHTML = `<div class="bar-top"><button class="round" data-act="back" aria-label="Retour">${ic('back')}</button><h1>Import PDF</h1><span class="round ph"></span></div>
+            <div class="block"><b>Aucun bon reconnu</b><p class="note" style="margin:8px 0 0">${warnings.map(esc).join('<br>')}<br>Tu peux ajouter la carte à la main ou depuis une capture d'écran.</p></div>`;
+          return;
+        }
+        render();
+      } catch (err) {
+        if (!pages.includes(el)) return;
+        el.innerHTML = `<div class="bar-top"><button class="round" data-act="back" aria-label="Retour">${ic('back')}</button><h1>Import PDF</h1><span class="round ph"></span></div>
+          <div class="block"><b>Lecture impossible</b><p class="note" style="margin:8px 0 0">Ce fichier n'a pas pu être lu (${esc(err && err.message || 'erreur')}). Vérifie que c'est bien un PDF, ou réessaie en ligne si c'est la première utilisation.</p></div>`;
+      }
+    })();
   }
 
   /* ---------- Recherche ---------- */
@@ -717,16 +813,21 @@
     const p = new URLSearchParams(location.search);
     if (!p.has('share')) return;
     const n = +p.get('share') || 0;
-    let file = null, text = '';
+    const files = []; let text = '';
     try {
       const cache = await caches.open('kado-share');
-      const r0 = n ? await cache.match('./shared-0') : null;
-      if (r0) file = new File([await r0.blob()], 'partage', { type: r0.headers.get('Content-Type') || 'image/jpeg' });
+      for (let i = 0; i < n; i++) {
+        const r = await cache.match('./shared-' + i); if (!r) continue;
+        const type = r.headers.get('Content-Type') || 'application/octet-stream';
+        files.push(new File([await r.blob()], `partage-${i + 1}${/pdf/.test(type) ? '.pdf' : ''}`, { type }));
+      }
       const rt = await cache.match('./shared-text'); if (rt) text = await rt.text();
       for (const k of await cache.keys()) await cache.delete(k);
     } catch { /* ignore */ }
     history.replaceState(null, '', location.pathname);
-    formPage(null, { file, text });
+    const pdfs = files.filter(f => /pdf/i.test(f.type) || /\.pdf$/i.test(f.name));
+    if (pdfs.length) openPdfImport(pdfs, false);
+    else formPage(null, { file: files[0] || null, text });
   }
 
   /* ---------- Démarrage ---------- */

@@ -4,6 +4,7 @@ Appli web installable (PWA) pour suivre ses cartes cadeaux, cashback et de fidé
 
 - Données **100 % locales** (IndexedDB) : rien n'est envoyé nulle part.
 - Fonctionne **hors ligne** une fois installée.
+- **Import de PDF** (bons d'achat des sites de cashback) : enseigne, montant, validité, numéro, PIN et code-barres/QR sont lus automatiquement, y compris quand un PDF contient plusieurs bons. Un écran de contrôle permet de corriger avant l'ajout. Un PDF partagé depuis Gmail ou les fichiers (Partager → Kado) s'ouvre directement dans cet écran.
 - Ajout par **scan caméra**, **import d'une image** (le code est lu dans la capture), **partage Android vers Kado**, ou saisie manuelle.
 - Sauvegarde / restauration en JSON depuis les réglages (toucher le prénom en haut à gauche).
 
@@ -23,8 +24,8 @@ Modifier les fichiers, puis changer `VERSION` en tête de `sw.js` (ex. `kado-v2`
 
 ```
 index.html · manifest.webmanifest · sw.js
-css/style.css · js/app.js
-vendor/   JsBarcode, qrcode-generator (MIT)
+css/style.css · js/app.js · js/pdfimport.js
+vendor/   JsBarcode, qrcode-generator, PDF.js (Apache-2.0), ZXing-wasm (MIT)
 fonts/    DM Serif Display, Manrope (OFL)
 icons/
 ```

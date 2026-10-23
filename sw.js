@@ -1,10 +1,11 @@
 /* Kado — service worker : hors-ligne, cible de partage, rappel d'expiration */
-const VERSION = 'kado-v2';
+const VERSION = 'kado-v3';
 const SHARE_CACHE = 'kado-share';
 const CORE = [
   './', './index.html', './manifest.webmanifest',
   './css/style.css', './js/app.js',
-  './vendor/JsBarcode.all.min.js', './vendor/qrcode.js',
+  './vendor/JsBarcode.all.min.js', './vendor/qrcode.js', './js/pdfimport.js',
+  './vendor/pdfjs/pdf.min.js', './vendor/pdfjs/pdf.worker.min.js', './vendor/zxing/reader.iife.js', './vendor/zxing/zxing_reader.wasm',
   './fonts/dm-serif-display-latin-400-normal.woff2', './fonts/manrope-latin-wght-normal.woff2',
   './icons/icon-192.png', './icons/icon-512.png'
 ];

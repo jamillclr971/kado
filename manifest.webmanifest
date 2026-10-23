@@ -21,7 +21,7 @@
     "params": {
       "title": "title",
       "text": "text",
-      "files": [{ "name": "media", "accept": ["image/*"] }]
+      "files": [{ "name": "media", "accept": ["application/pdf", ".pdf", "image/*"] }]
     }
   }
 }

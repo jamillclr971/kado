@@ -181,3 +181,21 @@ svg.i{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.9;stro
 .stores .st .t{flex:1;min-width:0}
 .stores .st .t b{display:block}
 .stores .st .t small{color:var(--ink-2);font-size:12px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* Import PDF */
+.src.pdfsrc{width:100%;flex-direction:row;gap:14px;background:var(--mint);color:#241C18;padding:16px 18px;margin-bottom:10px;text-align:left;border-radius:22px}
+.src.pdfsrc span{display:flex;flex-direction:column;gap:2px;font-size:15px}
+.src.pdfsrc small{font-weight:600;font-size:12px;opacity:.75}
+.warnbox{background:var(--warn-bg);color:var(--warn);font-weight:700;font-size:14px}
+.rv.dup{opacity:.7}
+.rvhead{display:flex;align-items:center;gap:12px;margin-bottom:14px;cursor:pointer}
+.rvhead input{width:22px;height:22px;accent-color:#241C18;flex:none}
+.rvhead .logo{width:44px;height:44px;font-size:17px;border-radius:13px;flex:none}
+.rvhead .t{min-width:0}
+.rvhead .t b{display:block;font-size:16px}
+.rvhead .t small{color:var(--ink-2);font-size:12px;font-weight:600}
+.rv .f{margin-bottom:10px}
+.rv .f input{height:46px;font-size:15px}
+.rvimg{background:#fff;border-radius:14px;padding:8px;display:grid;place-items:center;margin-top:2px}
+.rvimg img{max-width:100%;max-height:110px}
+.btn:disabled{opacity:.45;cursor:default}
