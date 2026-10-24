@@ -21,6 +21,8 @@
     scan: '<path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/>',
     image: '<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="9" cy="10" r="1.6"/><path d="m4 17 5-5 4 4 2-2 5 5"/>',
     x: '<path d="m6 6 12 12M18 6 6 18"/>',
+    sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6l1.4 1.4M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4"/>',
+    moon: '<path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/>',
     file: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/>',
     gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'
   };
@@ -32,6 +34,17 @@
     set(k, v) { try { localStorage.setItem('kado:' + k, JSON.stringify(v)); } catch { /* ignore */ } }
   };
   const alertDays = () => S.get('alertDays', 30);
+
+  /* ---------- Thème : auto / clair / sombre ---------- */
+  const themeMode = () => S.get('theme', 'auto');
+  const mq = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+  const isDark = () => { const m = themeMode(); return m === 'dark' || (m !== 'light' && !!(mq && mq.matches)); };
+  function applyTheme() {
+    const dark = isDark(), r = document.documentElement;
+    r.setAttribute('data-theme', dark ? 'dark' : 'light'); r.setAttribute('data-mode', themeMode());
+    const t = document.querySelector('meta[name=theme-color]'); if (t) t.setAttribute('content', dark ? '#141110' : '#EFEAE0');
+  }
+  if (mq && mq.addEventListener) mq.addEventListener('change', () => { if (themeMode() === 'auto') { applyTheme(); renderHome(); } });
 
   /* ---------- IndexedDB ---------- */
   let db = null;
@@ -66,7 +79,7 @@
 
   /* ---------- État ---------- */
   let cards = [];
-  const ui = { sort: 'recent', archive: false, hero: 0 };
+  const ui = { sort: 'exp', archive: false, hero: 0, tab: 'cadeaux' };
 
   async function saveCard(c) {
     c.updatedAt = Date.now();
@@ -183,7 +196,7 @@
     let exp = '';
     if (st === 'expired') exp = 'Expirée';
     else if (st === 'empty') exp = 'Épuisée';
-    else if (c.expiry) exp = 'Exp. ' + fmtMonth(c.expiry) + (soon ? ' · dans ' + dl + ' j' : '');
+    else if (c.expiry) exp = soon ? (dl === 0 ? "Expire aujourd'hui" : dl === 1 ? 'Expire demain' : 'Expire dans\u00A0' + dl + '\u00A0j') : 'Exp. ' + fmtMonth(c.expiry);
     const sub = [c.category || KIND[c.kind], exp].filter(Boolean).join(' · ');
     const pct = c.initial > 0 ? Math.max(0, Math.min(100, c.balance / c.initial * 100)) : 0;
     return `<button class="row ${soon ? 'soon' : ''} ${st !== 'active' ? 'off' : ''}" data-act="open" data-id="${c.id}">
@@ -204,23 +217,38 @@
   }
   function renderHome() {
     const st = stats();
-    const active = sorted(cards.filter(c => status(c) === 'active'));
-    const arch = sorted(cards.filter(c => status(c) !== 'active'));
+    const gift = ui.tab !== 'fid';
+    if (!gift && ui.sort === 'amt') ui.sort = 'az';
+    const pool = cards.filter(c => gift ? !isLoy(c) : isLoy(c));
+    const active = sorted(pool.filter(c => status(c) === 'active'));
+    const arch = sorted(pool.filter(c => status(c) !== 'active'));
+    const nGift = cards.filter(c => !isLoy(c) && status(c) === 'active').length;
+    const nFid = cards.filter(c => isLoy(c) && status(c) === 'active').length;
+    const soonSum = cards.filter(c => !isLoy(c) && status(c) === 'active' && daysLeft(c) !== null && daysLeft(c) <= alertDays()).reduce((s, c) => s + c.balance, 0);
     const alerts = computeAlerts().filter(a => a.kind === 'soon').length;
     const hero = ui.hero === 0
-      ? `<div class="lbl">Cagnotte cadeaux</div><div class="big">${eurHero(st.total)}</div><div class="sub">+${eurHero(st.added)} cette année</div>`
-      : `<div class="lbl">Dépensé cette année</div><div class="big">${eurHero(st.spent)}</div><div class="sub">${st.uses} utilisation${st.uses > 1 ? 's' : ''}</div>`;
+      ? `<div class="lbl">Cagnotte cadeaux</div><div class="big">${eurHero(st.total)}</div><div class="sub">${soonSum > 0.004 ? `dont ${eur(soonSum)} expirent sous ${alertDays()} jours` : `${nGift} carte${nGift > 1 ? 's' : ''} active${nGift > 1 ? 's' : ''}`}</div>`
+      : `<div class="lbl">Dépensé cette année</div><div class="big">${eurHero(st.spent)}</div><div class="sub">${st.uses} utilisation${st.uses > 1 ? 's' : ''} · ${eur(st.added)} ajoutés</div>`;
     const chip = (k, label, icon) => `<button class="chip ${ui.sort === k ? 'on' : ''}" data-act="sort" data-k="${k}">${icon ? ic(icon) : ''}${label}</button>`;
+    const chips = gift
+      ? chip('exp', 'Expiration', 'clock') + chip('recent', 'Récentes') + chip('az', 'A–Z', 'az') + chip('amt', 'Montant', 'amt')
+      : chip('az', 'A–Z', 'az') + chip('recent', 'Récentes') + chip('exp', 'Expiration', 'clock');
+    const empty = gift
+      ? `<div class="empty"><b>Aucune carte cadeau active</b>Appuie sur « Ajouter » pour importer un PDF de bons d'achat, scanner un code ou saisir une carte.</div>`
+      : `<div class="empty"><b>Aucune carte de fidélité</b>Ajoute tes cartes de magasin avec « Ajouter », puis choisis le type « Fidélité ».</div>`;
     $('#app').innerHTML = `
       <header class="top">
         <button class="who" data-act="settings" aria-label="Réglages">
           <span class="avatar">K</span>
           <span><small>Bonjour</small><b>${esc(S.get('name', 'Toi'))}</b></span>
         </button>
-        <button class="bell" data-act="alerts" aria-label="Alertes">${ic('bell')}${alerts ? '<span class="dot"></span>' : ''}</button>
+        <div class="tools">
+          <button class="bell" data-act="theme" aria-label="${isDark() ? 'Passer au thème clair' : 'Passer au thème sombre'}">${ic(isDark() ? 'sun' : 'moon')}</button>
+          <button class="bell" data-act="alerts" aria-label="Alertes">${ic('bell')}${alerts ? '<span class="dot"></span>' : ''}</button>
+        </div>
       </header>
       <section class="panel">
-        <div class="hero">${hero}<button class="eur" data-act="hero" aria-label="Changer l'affichage">€</button></div>
+        <div class="hero">${hero}<button class="eur ${ui.hero ? 'on' : ''}" data-act="hero" aria-label="Basculer entre le solde et les dépenses de l'année">€</button></div>
         <div class="actions">
           <button data-act="add">${ic('plus')}Ajouter</button>
           <button data-act="search">${ic('search')}Rechercher</button>
@@ -228,8 +256,9 @@
         </div>
       </section>
       <div class="sec"><h2>Mes cartes</h2><span>${active.length} active${active.length > 1 ? 's' : ''}</span></div>
-      <div class="chips">${chip('recent', 'Récentes')}${chip('az', 'A–Z', 'az')}${chip('exp', 'Expiration', 'clock')}${chip('amt', 'Montant', 'amt')}</div>
-      <div class="list">${active.length ? active.map(rowHTML).join('') : `<div class="empty"><b>Aucune carte active</b>Appuie sur « Ajouter » pour scanner une carte, importer la capture d'un bon ou saisir ses infos.</div>`}</div>
+      <div class="seg tabs"><button class="${gift ? 'on' : ''}" data-act="tab" data-k="cadeaux">Cartes cadeaux · ${nGift}</button><button class="${gift ? '' : 'on'}" data-act="tab" data-k="fid">Fidélité · ${nFid}</button></div>
+      <div class="chips">${chips}</div>
+      <div class="list">${active.length ? active.map(rowHTML).join('') : empty}</div>
       ${arch.length ? `<button class="more" data-act="archive">${ui.archive ? 'Masquer' : 'Voir'} les cartes archivées, vides ou expirées (${arch.length})</button>` : ''}
       ${ui.archive ? `<div class="list">${arch.map(rowHTML).join('')}</div>` : ''}`;
   }
@@ -330,15 +359,15 @@
       const hist = (c.history || []).slice().reverse();
       el.innerHTML = `
         <div class="bar-top"><button class="round" data-act="back" aria-label="Retour">${ic('back')}</button><h1>${esc(c.brand)}</h1><button class="round" data-act="edit" aria-label="Modifier">${ic('edit')}</button></div>
-        <div class="balance">
-          ${loy ? `<div class="k">${logo(c)}</div><div class="num" style="font-size:38px">${esc(c.brand)}</div><div class="of">Carte de fidélité</div>`
-          : `<div class="k">${logo(c)}</div><div class="num">${eurHero(c.balance)}</div><div class="of">sur ${eur(c.initial)}</div><i class="bar"><b style="width:${pct}%"></b></i>`}
+        <div class="balance compact">
+          ${loy ? `<div class="row2">${logo(c)}<div class="mid"><div class="num" style="font-size:30px">Carte de fidélité</div></div></div>`
+          : `<div class="row2">${logo(c)}<div class="mid"><div class="num">${eurHero(c.balance)}</div><div class="of">sur ${eur(c.initial)}</div></div></div><i class="bar"><b style="width:${pct}%"></b></i>`}
           ${pill}
         </div>
         ${(hasCode || hasImg) ? `<div class="block">
           ${hasCode && hasImg ? `<div class="seg"><button class="${el._mode === 'code' ? 'on' : ''}" data-act="mode" data-m="code">Code</button><button class="${el._mode === 'image' ? 'on' : ''}" data-act="mode" data-m="image">Image d'origine</button></div>` : ''}
           <div class="codebox" id="codebox" data-act="zoom"></div>
-          <p class="hint">Touche le code pour l'afficher en grand à la caisse</p></div>` : ''}
+          <p class="hint">Touche le code pour l'agrandir</p></div>` : ''}
         ${canSpend ? `<div class="block"><h3>J'ai dépensé</h3>
           <div class="spend"><input id="amt" inputmode="decimal" placeholder="0,00" autocomplete="off"><button class="btn" data-act="spend">Déduire</button></div>
           <div class="quick"><button data-act="all">Tout utiliser (${eur(c.balance)})</button></div></div>` : ''}
@@ -478,10 +507,8 @@
     const brands = [...new Set([...cards.map(x => x.brand), 'Amazon', 'Carrefour', 'Castorama', 'Leroy Merlin', 'Nike', 'Decathlon', 'Fnac', 'Galeries Lafayette', 'IKEA', 'Sephora', 'Zalando'])].sort((a, b) => a.localeCompare(b, 'fr'));
     const el = openPage(`
       <div class="bar-top"><button class="round" data-act="back" aria-label="Retour">${ic('back')}</button><h1>${edit ? 'Modifier la carte' : 'Nouvelle carte'}</h1><span class="round ph"></span></div>
-      ${edit ? '' : `<button class="src pdfsrc" data-act="pdf">${ic('file')}<span>Importer un PDF de bons d'achat<small>Tout est rempli automatiquement, même avec plusieurs bons</small></span></button>`}
-      <div class="srcs"><button class="src" data-act="scan">${ic('scan')}Scanner</button><button class="src" data-act="pick">${ic('image')}Importer une image</button></div>
+      ${edit ? `<div class="srcs"><button class="src" data-act="scan">${ic('scan')}Scanner</button><button class="src" data-act="pick">${ic('image')}Importer une image</button></div>` : ''}
       <input type="file" id="file" accept="image/*" class="hidden">
-      <input type="file" id="pdfin" accept="application/pdf,.pdf" multiple class="hidden">
       <div id="thumb"></div>
       <div class="seg" id="kind"></div>
       <label class="f"><span>Enseigne *</span><input id="brand" list="brands" autocomplete="off" placeholder="Carrefour, Leroy Merlin…"><datalist id="brands">${brands.map(b => `<option value="${esc(b)}">`).join('')}</datalist></label>
@@ -524,6 +551,7 @@
       toast(applyDetected(det) ? 'Code détecté dans l\'image' : 'Image ajoutée : saisis le code si besoin');
     };
     if (pre.file) handleFile(pre.file);
+    if (pre.code) { applyDetected(pre.code); toast('Code scanné : complète les informations'); }
     if (pre.file || pre.text) setTimeout(() => toast('Vérifie les champs préremplis'), 500);
 
     el.addEventListener('change', e => {
@@ -558,7 +586,7 @@
             else c.initial = bal;
           } else { c.balance = 0; c.initial = 0; }
           await saveCard(c);
-          closePage();
+          closePage(); for (let i = 0; i < (pre.parents || 0); i++) closePage();
           toast(edit ? 'Carte mise à jour' : 'Carte ajoutée');
           break;
         }
@@ -625,7 +653,7 @@
           });
           KadoPDF.rememberBin(norm(it.number), it.brand.trim());
         }
-        closePage(); if (closeParent) closePage();
+        closePage(); for (let i = 0; i < (+closeParent || 0); i++) closePage();
         toast(`${sel.length} carte${sel.length > 1 ? 's' : ''} ajoutée${sel.length > 1 ? 's' : ''}`);
       }
     });
@@ -656,14 +684,48 @@
     })();
   }
 
+
+  /* ---------- Menu « Ajouter » ---------- */
+  function openAddMenu() {
+    const opt = (k, icon, t, s) => `<button class="opt" data-act="${k}"><span class="oi">${ic(icon)}</span><span class="ot"><b>${t}</b><small>${s}</small></span></button>`;
+    const el = openPage(`<div class="bar-top"><button class="round" data-act="back" aria-label="Retour">${ic('back')}</button><h1>Ajouter une carte</h1><span class="round ph"></span></div>
+      <div class="opts">
+        ${opt('pdf', 'file', 'Importer un PDF', "Bons d'achat reçus par mail : tout est rempli automatiquement")}
+        ${opt('scan', 'scan', 'Scanner un code', 'Code-barres ou QR code, sur une carte ou un écran')}
+        ${opt('img', 'image', 'Importer une image', "Capture d'écran d'un bon ou d'une carte")}
+        ${opt('manual', 'edit', 'Saisir à la main', 'Enseigne, solde, validité, numéro…')}
+      </div>
+      <input type="file" id="pdfin" accept="application/pdf,.pdf" multiple class="hidden">
+      <input type="file" id="imgin" accept="image/*" class="hidden">`);
+    el.addEventListener('change', e => {
+      const t = e.target;
+      if (t.id === 'pdfin' && t.files.length) { const fl = [...t.files]; t.value = ''; openPdfImport(fl, 1); }
+      if (t.id === 'imgin' && t.files.length) { const f = t.files[0]; t.value = ''; formPage(null, { file: f, parents: 1 }); }
+    });
+    el.addEventListener('click', e => {
+      const b = e.target.closest('[data-act]'); if (!b) return;
+      switch (b.dataset.act) {
+        case 'back': closePage(); break;
+        case 'pdf': $('#pdfin', el).click(); break;
+        case 'img': $('#imgin', el).click(); break;
+        case 'manual': formPage(null, { parents: 1 }); break;
+        case 'scan': openScanner(det => setTimeout(() => formPage(null, { code: det, parents: 1 }), 350)); break;
+      }
+    });
+  }
+
   /* ---------- Recherche ---------- */
   function openSearch() {
     const el = openPage(`<div class="bar-top"><button class="round" data-act="back" aria-label="Retour">${ic('back')}</button><h1>Rechercher</h1><span class="round ph"></span></div>
-      <input class="srch" id="q" placeholder="Enseigne, catégorie, numéro…" autocomplete="off"><div class="list" id="res"></div>`);
+      <input class="srch" id="q" placeholder="Enseigne, numéro, notes…" autocomplete="off"><div class="chips in-page" id="cats"></div><div class="list" id="res"></div>`);
+    el._cat = '';
     const run = () => {
       const q = $('#q', el).value.trim().toLowerCase();
-      const hit = sorted(cards).filter(c => !q || [c.brand, c.category, c.number, KIND[c.kind], c.notes].join(' ').toLowerCase().includes(q));
-      $('#res', el).innerHTML = hit.length ? hit.map(rowHTML).join('') : '<div class="empty"><b>Aucun résultat</b>Essaie un autre mot.</div>';
+      const cats = [...new Set(cards.map(c => c.category).filter(Boolean))].sort((x, y) => x.localeCompare(y, 'fr'));
+      if (el._cat && !cats.includes(el._cat)) el._cat = '';
+      $('#cats', el).innerHTML = cats.length ? ['', ...cats].map(k => `<button class="chip ${el._cat === k ? 'on' : ''}" data-act="cat" data-k="${esc(k)}">${k ? esc(k) : 'Tout'}</button>`).join('') : '';
+      const hit = sorted(cards).filter(c => (!el._cat || c.category === el._cat) && (!q || [c.brand, c.category, c.number, KIND[c.kind], c.notes].join(' ').toLowerCase().includes(q)));
+      $('#res', el).innerHTML = hit.length ? hit.map(rowHTML).join('') : '<div class="empty"><b>Aucun résultat</b>Essaie un autre mot ou une autre catégorie.</div>';
     };
     el._render = run; run();
     el.addEventListener('input', e => { if (e.target.id === 'q') run(); });
@@ -671,6 +733,7 @@
       const b = e.target.closest('[data-act]'); if (!b) return;
       if (b.dataset.act === 'back') closePage();
       if (b.dataset.act === 'open') openDetail(b.dataset.id);
+      if (b.dataset.act === 'cat') { el._cat = b.dataset.k; run(); }
     });
     setTimeout(() => $('#q', el).focus(), 320);
   }
@@ -686,6 +749,7 @@
           ${st.length ? st.map((s, i) => { const k = brandColor(s.brand); return `<div class="st"><span class="logo" style="background:${k.bg};color:${k.fg};width:44px;height:44px;font-size:17px;border-radius:13px">${esc(initials(s.brand))}</span><div class="t"><b>${esc(s.brand)}</b><small>${esc(s.url)}</small></div><button class="btn sm" data-act="go" data-u="${esc(s.url)}">Acheter</button><button class="round" style="width:40px;height:40px" data-act="rm" data-i="${i}" aria-label="Supprimer">${ic('x')}</button></div>`; }).join('')
           : '<div style="color:var(--ink-2);font-size:14px;line-height:1.5">Enregistre ici la page d\'achat des cartes cadeaux ou cashback de tes enseignes pour les ouvrir en un appui.</div>'}
         </div>
+        ${(() => { const have = new Set(st.map(s => s.brand.toLowerCase())); const sg = [...new Set(cards.map(c => c.brand))].filter(b => !have.has(b.toLowerCase())); return sg.length ? `<div class="block"><h3>Enseignes de tes cartes</h3><div class="quick" style="margin-top:0">${sg.map(b => `<button data-act="sugg" data-b="${esc(b)}">+ ${esc(b)}</button>`).join('')}</div></div>` : ''; })()}
         <div class="block"><h3>Ajouter une enseigne</h3>
           <label class="f"><span>Enseigne</span><input id="sb" autocomplete="off" placeholder="Leroy Merlin"></label>
           <label class="f"><span>Lien de la page d'achat</span><input id="su" type="url" autocomplete="off" placeholder="https://…"></label>
@@ -699,6 +763,7 @@
       switch (b.dataset.act) {
         case 'back': closePage(); break;
         case 'go': window.open(b.dataset.u, '_blank', 'noopener'); break;
+        case 'sugg': $('#sb', el).value = b.dataset.b; $('#su', el).focus(); break;
         case 'rm': st.splice(+b.dataset.i, 1); S.set('stores', st); el._render(); break;
         case 'addstore': {
           const brand = $('#sb', el).value.trim(), url = normUrl($('#su', el).value);
@@ -760,6 +825,7 @@
     el._render = async () => {
       const ns = notifState(), pers = await persistState();
       el.innerHTML = `<div class="bar-top"><button class="round" data-act="back" aria-label="Retour">${ic('back')}</button><h1>Réglages</h1><span class="round ph"></span></div>
+        <div class="block"><h3>Apparence</h3><div class="seg" style="margin:0">${[['auto', 'Auto'], ['light', 'Clair'], ['dark', 'Sombre']].map(([k, l]) => `<button class="${themeMode() === k ? 'on' : ''}" data-act="thememode" data-m="${k}">${l}</button>`).join('')}</div><p class="note" style="margin:10px 0 0">Auto suit le thème de ton téléphone.</p></div>
         <div class="block"><label class="f"><span>Prénom affiché</span><input id="nm" value="${esc(S.get('name', 'Toi'))}" autocomplete="off"></label>
           <label class="f" style="margin:0"><span>Alerter avant l'expiration</span><select id="ad">${[7, 15, 30, 60, 90].map(n => `<option value="${n}" ${alertDays() === n ? 'selected' : ''}>${n} jours avant</option>`).join('')}</select></label></div>
         <div class="block"><h3>Rappels</h3>
@@ -781,6 +847,7 @@
     el.addEventListener('click', async e => {
       const b = e.target.closest('[data-act]'); if (!b) return;
       if (b.dataset.act === 'back') closePage();
+      if (b.dataset.act === 'thememode') { S.set('theme', b.dataset.m); applyTheme(); renderHome(); el._render(); }
       if (b.dataset.act === 'notif') { await enableReminders(); el._render(); }
       if (b.dataset.act === 'export') exportData();
       if (b.dataset.act === 'import') $('#imp', el).click();
@@ -791,7 +858,9 @@
   $('#app').addEventListener('click', e => {
     const b = e.target.closest('[data-act]'); if (!b) return;
     switch (b.dataset.act) {
-      case 'add': formPage(null); break;
+      case 'add': openAddMenu(); break;
+      case 'theme': S.set('theme', isDark() ? 'light' : 'dark'); applyTheme(); renderHome(); toast(isDark() ? 'Thème sombre' : 'Thème clair'); break;
+      case 'tab': ui.tab = b.dataset.k; renderHome(); break;
       case 'search': openSearch(); break;
       case 'buy': openBuy(); break;
       case 'alerts': openAlerts(); break;
@@ -832,6 +901,7 @@
 
   /* ---------- Démarrage ---------- */
   async function init() {
+    applyTheme();
     db = await openDB();
     if (!db) toast('Stockage indisponible : les cartes ne seront pas conservées');
     cards = await dbAll('cards');
