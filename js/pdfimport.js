@@ -232,11 +232,104 @@
     return { cards, warnings };
   }
 
+
+  /* ---------- Import d'une image (capture d'écran, photo) : codes + OCR ---------- */
+  let tessP = null;
+  const loadTess = () => tessP || (tessP = new Promise((res, rej) => {
+    if (window.Tesseract) return res(window.Tesseract);
+    const sc = document.createElement('script');
+    sc.src = url('vendor/tesseract/tesseract.min.js'); sc.onload = () => res(window.Tesseract); sc.onerror = () => { tessP = null; rej(new Error('tesseract')); };
+    document.head.append(sc);
+  }));
+  const MONTHS = { janvier: 1, fevrier: 2, mars: 3, avril: 4, mai: 5, juin: 6, juillet: 7, aout: 8, septembre: 9, octobre: 10, novembre: 11, decembre: 12 };
+
+  function parseOcr(text) {
+    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    const out = { number: '', pin: '', amount: null, expiry: '', brand: '' };
+    const dates = [];
+    const amounts = [];
+    for (let li = 0; li < lines.length; li++) {
+      const t = lines[li], n = norm(t);
+      const kw = /valab|validit|expir|jusqu|avant le|utilisable/.test(n);
+      for (const m of t.matchAll(/(?<!\d)(\d{1,2})\s*[\/.\-]\s*(\d{1,2})\s*[\/.\-]\s*(20\d{2}|\d{2})(?!\d)/g)) {
+        const y = m[3].length === 2 ? '20' + m[3] : m[3]; const d = isoDate(m[1], m[2], y); if (d) dates.push({ v: d, kw });
+      }
+      for (const m of n.matchAll(/(?<!\d)(\d{1,2})(?:er)?\s+(janvier|fevrier|mars|avril|mai|juin|juillet|aout|septembre|octobre|novembre|decembre)\s+(20\d{2})/g)) {
+        const d = isoDate(m[1], MONTHS[m[2]], m[3]); if (d) dates.push({ v: d, kw });
+      }
+      if (!out.pin) { const m = t.match(/(?:code\s*)?(?:pin|secret|confidentiel)\s*(?:de la carte)?\s*[:：]?\s*(\d{3,8})(?!\d)/i); if (m) out.pin = m[1]; }
+      if (!out.number) {
+        const m = t.match(/(?<!\d)(\d{12,25})(?!\d)/) || t.match(/(?<!\d)(\d{3,6}(?:[ -]\d{3,6}){2,6})(?!\d)/);
+        if (m) { const d = m[1].replace(/\D/g, ''); if (d.length >= 12 && d.length <= 25) out.number = d; }
+      }
+      const kwAmt = /bon|valeur|montant|solde|carte|cadeau|offert/.test(n);
+      for (const m of t.matchAll(/(\d{1,4})\s?€\s?(\d{2})(?![\d\/.-])/g)) amounts.push({ v: parseFloat(m[1] + '.' + m[2]), kw: kwAmt });
+      for (const m of t.matchAll(/(\d{1,4}(?:[.,]\d{1,2})?)\s*(?:€|eur\b|euros?\b)/gi)) {
+        const v = parseFloat(m[1].replace(',', '.')); if (v >= 1 && v <= 5000) amounts.push({ v, kw: kwAmt });
+      }
+      // « Montant : 80e » (le € est parfois lu « e ») : sur la ligne ou la suivante
+      if (/montant|valeur|solde/.test(n)) {
+        for (const src of [t.replace(/^.*?(montant|valeur|solde)/i, ''), lines[li + 1] || '']) {
+          const m = src.match(/(?<![\d\/.])(\d{1,4}(?:[.,]\d{1,2})?)\s*(?:€|e\b|eur\b|euros?\b)/i);
+          if (m) { const v = parseFloat(m[1].replace(',', '.')); if (v >= 1 && v <= 5000) { amounts.push({ v, kw: true }); break; } }
+        }
+      }
+    }
+    if (dates.length) { const k = dates.filter(d => d.kw); out.expiry = (k.length ? k : dates).map(d => d.v).sort().pop(); }
+    if (amounts.length) {
+      const k = amounts.filter(a => a.kw), arr = (k.length ? k : amounts).map(a => a.v), cnt = {};
+      arr.forEach(v => { cnt[v] = (cnt[v] || 0) + 1; });
+      out.amount = arr.sort((a, b) => cnt[b] - cnt[a] || a - b)[0];
+    }
+    // Enseigne : nom connu le plus cité, ou « Bon d'achat X »
+    const nt = norm(text); let best = 0;
+    for (const [b] of KNOWN) {
+      const re = new RegExp('(^|[^a-z])' + norm(b).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![a-z])', 'g');
+      const c = (nt.match(re) || []).length; if (c > best) { best = c; out.brand = b; }
+    }
+    if (!out.brand) { const m = text.match(/bons?\s+d['’]achat\s+([A-ZÉ][\w'’ éèêàç\-]{1,30})/i); if (m) out.brand = canon(m[1].trim()) || m[1].trim(); }
+    out.category = categoryOf(out.brand);
+    return out;
+  }
+
+  async function extractImage(file, onProgress) {
+    const say = m => { if (onProgress) onProgress(m); };
+    const res = { code: null, number: '', pin: '', amount: null, expiry: '', brand: '', category: '', text: '', ocrFailed: false };
+    let bmp; try { bmp = await createImageBitmap(file); } catch { return res; }
+    // Canvas de travail : entre 1400 et 2400 px de grand côté (le texte fin est mieux lu en grand)
+    const k = Math.max(1400, Math.min(2400, Math.max(bmp.width, bmp.height))) / Math.max(bmp.width, bmp.height);
+    const cv = document.createElement('canvas'); cv.width = Math.round(bmp.width * k); cv.height = Math.round(bmp.height * k);
+    const g = cv.getContext('2d', { willReadFrequently: true }); g.fillStyle = '#fff'; g.fillRect(0, 0, cv.width, cv.height); g.drawImage(bmp, 0, 0, cv.width, cv.height);
+
+    say('Recherche du code-barres…');
+    try {
+      const ZX = await loadZX();
+      const r = await ZX.readBarcodes(g.getImageData(0, 0, cv.width, cv.height), { tryHarder: true, tryRotate: true, maxNumberOfSymbols: 4 });
+      const s = r.find(x => x.text); if (s) res.code = { value: s.text, format: FMT[s.format] || String(s.format || '').toLowerCase() };
+    } catch { /* ignore */ }
+
+    say('Lecture du texte…');
+    try {
+      const T = await loadTess();
+      const worker = await T.createWorker('fra', 1, {
+        workerPath: url('vendor/tesseract/worker.min.js'), corePath: url('vendor/tesseract/'), langPath: url('vendor/tesseract/lang/'),
+        workerBlobURL: false, gzip: true, cacheMethod: 'none'
+      });
+      const { data } = await worker.recognize(cv);
+      await worker.terminate();
+      res.text = data.text || '';
+    } catch (e) { res.ocrFailed = true; }
+
+    Object.assign(res, parseOcr(res.text));
+    if (!res.number && res.code && /^\d{12,25}$/.test(res.code.value)) res.number = res.code.value;
+    return res;
+  }
+
   function readBins() { try { return JSON.parse(localStorage.getItem('kado:bins') || '{}'); } catch { return {}; } }
   function rememberBin(number, brand) {
     if (!number || number.length < 8 || !brand) return;
     try { const b = readBins(); b[number.slice(0, 6)] = brand; localStorage.setItem('kado:bins', JSON.stringify(b)); } catch { /* ignore */ }
   }
 
-  window.KadoPDF = { extract, rememberBin, KNOWN };
+  window.KadoPDF = { extract, extractImage, parseOcr, rememberBin, KNOWN };
 })();

@@ -1,5 +1,5 @@
 /* Kado — service worker : hors-ligne, cible de partage, rappel d'expiration */
-const VERSION = 'kado-v5';
+const VERSION = 'kado-v6';
 const SHARE_CACHE = 'kado-share';
 const CORE = [
   './', './index.html', './manifest.webmanifest',

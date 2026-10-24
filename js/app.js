@@ -546,9 +546,27 @@
     };
     const handleFile = async f => {
       if (!f) return;
+      toast('Lecture de l\'image…');
       const { dataUrl, det } = await importImage(f);
       c.image = dataUrl; renderThumb();
-      toast(applyDetected(det) ? 'Code détecté dans l\'image' : 'Image ajoutée : saisis le code si besoin');
+      let r = null;
+      try { r = await KadoPDF.extractImage(f, m => toast(m)); } catch { /* ignore */ }
+      read();
+      const code = (r && r.code) || det;
+      if (code && !c.code.value) c.code = code;
+      const got = [];
+      if (r) {
+        if (r.brand && !c.brand) { c.brand = r.brand; got.push('enseigne'); }
+        if (r.category && !c.category) c.category = r.category;
+        if (r.number && !c.number) { c.number = r.number; got.push('numéro'); }
+        if (r.pin && !c.pin) { c.pin = r.pin; got.push('PIN'); }
+        if (r.expiry && !c.expiry) { c.expiry = r.expiry; got.push('validité'); }
+        if (r.amount && !isLoy(c) && !c.initial && !c.balance) { c.initial = c.balance = r.amount; got.push('montant'); }
+      }
+      if (code && !c.number) c.number = code.value;
+      renderKind(); sync(); renderThumb();
+      if (code) got.unshift('code');
+      toast(got.length ? 'Lu dans l\'image : ' + got.join(', ') + '. Vérifie les champs.' : (r && r.ocrFailed ? 'Texte illisible : saisis les champs à la main' : 'Rien de reconnu : saisis les champs à la main'));
     };
     if (pre.file) handleFile(pre.file);
     if (pre.code) { applyDetected(pre.code); toast('Code scanné : complète les informations'); }
