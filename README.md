@@ -7,6 +7,8 @@ Appli web installable (PWA) pour suivre ses cartes cadeaux, cashback et de fidé
 - **Import de PDF** (bons d'achat des sites de cashback) : enseigne, montant, validité, numéro, PIN et code-barres/QR sont lus automatiquement, y compris quand un PDF contient plusieurs bons. Un écran de contrôle permet de corriger avant l'ajout. Un PDF partagé depuis Gmail ou les fichiers (Partager → Kado) s'ouvre directement dans cet écran.
 - Ajout par **scan caméra**, **import d'une image** (code lu + texte reconnu par OCR : enseigne, montant, validité, numéro, PIN), **partage Android vers Kado**, ou saisie manuelle.
 - **Thème clair, sombre ou automatique** (réglages, ou bouton soleil/lune en haut de l'accueil).
+- **Rappels d'expiration** : une notification à chaque palier (délai choisi, 7, 3, 1 jour, jour même), jamais deux fois la même ; un appui ouvre directement la carte concernée. Point sur l'icône de l'appli installée.
+- **Dépenses par mois** (touche « Dépenses par mois » sur l'accueil) et **affichage compact** de la liste.
 - Sauvegarde / restauration en JSON depuis les réglages (toucher le prénom en haut à gauche).
 
 ## Mise en ligne sur GitHub Pages
@@ -19,16 +21,17 @@ Après installation, Kado apparaît dans la liste « Partager » d'Android pour 
 
 ## Mettre à jour
 
-Modifier les fichiers, puis changer `VERSION` en tête de `sw.js` (ex. `kado-v6`) pour que les téléphones récupèrent la nouvelle version.
+Modifier les fichiers, puis changer `VERSION` en tête de `sw.js` (ex. `kado-v8`) pour que les téléphones récupèrent la nouvelle version.
 
 ## Structure
 
 ```
 index.html · manifest.webmanifest · sw.js
-css/style.css · js/app.js · js/pdfimport.js
+css/style.css · js/app.js · js/pdfimport.js · js/reminders.js
 vendor/   JsBarcode, qrcode-generator, PDF.js (Apache-2.0), ZXing-wasm (MIT), Tesseract.js (Apache-2.0, OCR des images)
 fonts/    DM Serif Display, Manrope (OFL)
 icons/
+tests/    node --test tests/*.test.js   (rappels, reconnaissance des enseignes)
 ```
 
 ## Prochaine version

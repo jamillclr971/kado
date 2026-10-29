@@ -1,7 +1,7 @@
 'use strict';
 /* Kado — cartes cadeaux, cashback & fidélité. Données 100 % locales (IndexedDB). */
 (() => {
-  const VERSION = '1.0.0';
+  const VERSION = '1.1.0';
   const $ = (s, r = document) => r.querySelector(s);
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -12,6 +12,9 @@
     plus: '<path d="M12 5v14M5 12h14"/>',
     search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
     cart: '<circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M2.5 3.5h3l2.4 11.2a1.5 1.5 0 0 0 1.5 1.2h8.2a1.5 1.5 0 0 0 1.5-1.1L21 8H6.2"/>',
+    rows: '<path d="M4 6.5h16M4 12h16M4 17.5h16"/>',
+    chart: '<path d="M5 20V11M12 20V5M19 20v-6"/>',
+    fwd: '<path d="m9 5 7 7-7 7"/>',
     bell: '<path d="M6 9a6 6 0 1 1 12 0c0 6 2.5 7.5 2.5 7.5h-17S6 15 6 9z"/><path d="M10 20a2 2 0 0 0 4 0"/>',
     back: '<path d="m15 5-7 7 7 7"/>',
     edit: '<path d="M4 20h4L19 9a2.1 2.1 0 0 0-3-3L5 17z"/><path d="m14.5 7.5 3 3"/>',
@@ -34,6 +37,8 @@
     set(k, v) { try { localStorage.setItem('kado:' + k, JSON.stringify(v)); } catch { /* ignore */ } }
   };
   const alertDays = () => S.get('alertDays', 30);
+  const compact = () => S.get('density', 'comfort') === 'compact';
+  const applyDensity = () => document.documentElement.setAttribute('data-density', compact() ? 'compact' : 'comfort');
 
   /* ---------- Thème : auto / clair / sombre ---------- */
   const themeMode = () => S.get('theme', 'auto');
@@ -65,6 +70,11 @@
     if (!db) return res([]);
     const q = db.transaction(n).objectStore(n).getAll();
     q.onsuccess = () => res(q.result || []); q.onerror = () => res([]);
+  });
+  const dbGet = (n, k) => new Promise(res => {
+    if (!db) return res(undefined);
+    const q = db.transaction(n).objectStore(n).get(k);
+    q.onsuccess = () => res(q.result); q.onerror = () => res(undefined);
   });
   const dbPut = (n, v) => new Promise(res => {
     if (!db) return res();
@@ -166,16 +176,20 @@
     $('#overlay-root').append(el);
     requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('in')));
     pages.push(el);
+    $('#app').inert = true; // l'accueil n'est plus atteignable (clavier, lecteur d'écran) tant qu'une page est ouverte
+    el.tabIndex = -1; try { el.focus({ preventScroll: true }); } catch { /* ignore */ }
     history.pushState({ kado: pages.length }, '');
     return el;
   }
   function closePage(viaPop) {
     const el = pages.pop(); if (!el) return;
+    $('#app').inert = pages.length > 0;
     if (el._cleanup) try { el._cleanup(); } catch { /* ignore */ }
     el.classList.remove('in');
     setTimeout(() => el.remove(), 280);
     if (!viaPop) { ignorePop++; history.back(); }
   }
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && pages.length) closePage(); });
   window.addEventListener('popstate', () => {
     if (ignorePop > 0) { ignorePop--; return; }
     if (pages.length) closePage(true);
@@ -244,18 +258,18 @@
         </button>
         <div class="tools">
           <button class="bell" data-act="theme" aria-label="${isDark() ? 'Passer au thème clair' : 'Passer au thème sombre'}">${ic(isDark() ? 'sun' : 'moon')}</button>
-          <button class="bell" data-act="alerts" aria-label="Alertes">${ic('bell')}${alerts ? '<span class="dot"></span>' : ''}</button>
+          <button class="bell" data-act="alerts" aria-label="${alerts ? 'Alertes : ' + alerts + ' carte' + (alerts > 1 ? 's' : '') + ' à surveiller' : 'Alertes'}">${ic('bell')}${alerts ? '<span class="dot"></span>' : ''}</button>
         </div>
       </header>
       <section class="panel">
-        <div class="hero">${hero}<button class="eur ${ui.hero ? 'on' : ''}" data-act="hero" aria-label="Basculer entre le solde et les dépenses de l'année">€</button></div>
+        <div class="hero">${hero}<button class="eur ${ui.hero ? 'on' : ''}" data-act="hero" aria-label="Basculer entre le solde et les dépenses de l'année" aria-pressed="${!!ui.hero}">€</button><button class="herolink" data-act="stats">Dépenses par mois</button></div>
         <div class="actions">
           <button data-act="add">${ic('plus')}Ajouter</button>
           <button data-act="search">${ic('search')}Rechercher</button>
           <button data-act="buy">${ic('cart')}Acheter</button>
         </div>
       </section>
-      <div class="sec"><h2>Mes cartes</h2><span>${active.length} active${active.length > 1 ? 's' : ''}</span></div>
+      <div class="sec"><h2>Mes cartes</h2><span class="tail"><span>${active.length} active${active.length > 1 ? 's' : ''}</span><button class="dens" data-act="density" aria-pressed="${compact()}" aria-label="Affichage compact de la liste">${ic('rows')}</button></span></div>
       <div class="seg tabs"><button class="${gift ? 'on' : ''}" data-act="tab" data-k="cadeaux">Cartes cadeaux · ${nGift}</button><button class="${gift ? '' : 'on'}" data-act="tab" data-k="fid">Fidélité · ${nFid}</button></div>
       <div class="chips">${chips}</div>
       <div class="list">${active.length ? active.map(rowHTML).join('') : empty}</div>
@@ -265,6 +279,7 @@
   function refresh() {
     renderHome();
     pages.forEach(p => p._render && p._render());
+    syncBadge();
   }
 
   /* ---------- Alertes ---------- */
@@ -504,7 +519,7 @@
       if (extra.expiry) c.expiry = extra.expiry;
       if (extra.amount) c.initial = c.balance = parseAmount(extra.amount);
     }
-    const brands = [...new Set([...cards.map(x => x.brand), 'Amazon', 'Carrefour', 'Castorama', 'Leroy Merlin', 'Nike', 'Decathlon', 'Fnac', 'Galeries Lafayette', 'IKEA', 'Sephora', 'Zalando'])].sort((a, b) => a.localeCompare(b, 'fr'));
+    const brands = [...new Set([...cards.map(x => x.brand), ...KadoPDF.KNOWN.map(k => k[0])])].sort((a, b) => a.localeCompare(b, 'fr'));
     const el = openPage(`
       <div class="bar-top"><button class="round" data-act="back" aria-label="Retour">${ic('back')}</button><h1>${edit ? 'Modifier la carte' : 'Nouvelle carte'}</h1><span class="round ph"></span></div>
       ${edit ? `<div class="srcs"><button class="src" data-act="scan">${ic('scan')}Scanner</button><button class="src" data-act="pick">${ic('image')}Importer une image</button></div>` : ''}
@@ -604,6 +619,7 @@
             else c.initial = bal;
           } else { c.balance = 0; c.initial = 0; }
           await saveCard(c);
+          if (!isLoy(c)) KadoPDF.rememberBin(String(c.number || '').replace(/\D/g, ''), c.brand);
           closePage(); for (let i = 0; i < (pre.parents || 0); i++) closePage();
           toast(edit ? 'Carte mise à jour' : 'Carte ajoutée');
           break;
@@ -732,6 +748,50 @@
     });
   }
 
+  /* ---------- Dépenses par mois ---------- */
+  const MONTHS_S = ['janv', 'févr', 'mars', 'avr', 'mai', 'juin', 'juil', 'août', 'sept', 'oct', 'nov', 'déc'];
+  const MONTHS_L = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+  function spendOf(year) {
+    const months = Array.from({ length: 12 }, () => ({ amount: 0, uses: 0 })), by = {};
+    for (const c of cards) for (const h of c.history || []) {
+      const d = new Date(h.date); if (d.getFullYear() !== year) continue;
+      months[d.getMonth()].amount += h.amount; months[d.getMonth()].uses++;
+      by[c.brand] = (by[c.brand] || 0) + h.amount;
+    }
+    return { months, brands: Object.entries(by).sort((a, b) => b[1] - a[1]) };
+  }
+  function openStats() {
+    const now = new Date(), thisYear = now.getFullYear();
+    const years = cards.flatMap(c => (c.history || []).map(h => new Date(h.date).getFullYear())).filter(isFinite);
+    const first = Math.min(thisYear, ...years);
+    const el = openPage('');
+    el._year = thisYear; el._sel = null;
+    el._render = () => {
+      const { months, brands } = spendOf(el._year);
+      const total = months.reduce((s, m) => s + m.amount, 0), uses = months.reduce((s, m) => s + m.uses, 0);
+      const max = Math.max(...months.map(m => m.amount));
+      if (el._sel === null || el._sel.y !== el._year) el._sel = { y: el._year, m: el._year === thisYear ? now.getMonth() : Math.max(0, months.findIndex(m => m.amount === max)) };
+      const lost = cards.filter(c => !isLoy(c) && status(c) === 'expired').reduce((s, c) => s + c.balance, 0);
+      const say = i => `${MONTHS_L[i]} ${el._year} · ${eur(months[i].amount)} · ${months[i].uses} utilisation${months[i].uses > 1 ? 's' : ''}`;
+      el.innerHTML = `<div class="bar-top"><button class="round" data-act="back" aria-label="Retour">${ic('back')}</button><h1>Dépenses</h1><span class="round ph"></span></div>
+        <div class="yearnav"><button class="round" data-act="year" data-d="-1" aria-label="Année précédente" ${el._year <= first ? 'disabled' : ''}>${ic('back')}</button><b>${el._year}</b><button class="round" data-act="year" data-d="1" aria-label="Année suivante" ${el._year >= thisYear ? 'disabled' : ''}>${ic('fwd')}</button></div>
+        <div class="kpis"><div class="kpi"><b>${eur(total)}</b><small>dépensés</small></div><div class="kpi"><b>${uses}</b><small>utilisation${uses > 1 ? 's' : ''}</small></div><div class="kpi ${lost > 0.004 ? 'bad' : ''}"><b>${eur(lost)}</b><small>perdus à l'expiration</small></div></div>
+        <div class="block"><h3>Par mois</h3>
+          <div class="chart" role="group" aria-label="Dépenses par mois en ${el._year}">${months.map((m, i) => `<button class="col ${m.amount > 0 ? 'has' : ''} ${el._sel.m === i ? 'on' : ''}" data-act="bar" data-i="${i}" style="--h:${max > 0 ? Math.round(m.amount / max * 100) : 0}%" aria-pressed="${el._sel.m === i}" aria-label="${MONTHS_L[i]} : ${eur(m.amount)}"><i></i><span>${MONTHS_S[i]}</span></button>`).join('')}</div>
+          <p class="readout" aria-live="polite">${say(el._sel.m)}</p></div>
+        ${brands.length ? `<div class="block top5"><h3>Où tu dépenses le plus</h3>${brands.slice(0, 5).map(([b, v]) => `<div class="tb"><div><span>${esc(b)}</span><b>${eur(v)}</b></div><i><b style="width:${Math.round(v / brands[0][1] * 100)}%"></b></i></div>`).join('')}</div>` : `<div class="empty"><b>Aucune dépense en ${el._year}</b>Saisis un montant dans « J'ai dépensé » sur la fiche d'une carte : il apparaît ici.</div>`}
+        <p class="note">« Perdus à l'expiration » additionne le solde restant des cartes expirées, toutes années confondues.</p>`;
+    };
+    el._render();
+    el.addEventListener('click', e => {
+      const b = e.target.closest('[data-act]'); if (!b) return;
+      if (b.dataset.act === 'back') closePage();
+      const keep = (sel) => { el._render(); const n = $(sel, el); if (n && !n.disabled) n.focus(); };
+      if (b.dataset.act === 'year') { el._year += +b.dataset.d; keep(`[data-act="year"][data-d="${b.dataset.d}"]`); }
+      if (b.dataset.act === 'bar') { el._sel = { y: el._year, m: +b.dataset.i }; keep(`[data-act="bar"][data-i="${b.dataset.i}"]`); }
+    });
+  }
+
   /* ---------- Recherche ---------- */
   function openSearch() {
     const el = openPage(`<div class="bar-top"><button class="round" data-act="back" aria-label="Retour">${ic('back')}</button><h1>Rechercher</h1><span class="round ph"></span></div>
@@ -807,17 +867,38 @@
       if ('periodicSync' in reg) await reg.periodicSync.register('kado-expiry', { minInterval: 12 * 3600 * 1000 });
     } catch { /* non disponible */ }
   }
+  /* Pastille sur l'icône de l'appli installée : nombre de cartes à surveiller. */
+  function setBadge(n) {
+    try { if (navigator.setAppBadge) (n ? navigator.setAppBadge(n) : navigator.clearAppBadge()).catch(() => {}); } catch { /* non disponible */ }
+  }
+  const syncBadge = () => setBadge(KadoReminders.plan(cards, { alertDays: alertDays() }).soon);
+  /* Une notification par carte et par palier franchi (voir reminders.js). `force` : tout ré-annoncer. */
   async function notifyIfNeeded(force) {
+    const prev = await dbGet('meta', 'notified');
+    const { due, notified, soon } = KadoReminders.plan(cards, { alertDays: alertDays(), notified: (prev && prev.v) || {}, force });
+    setBadge(soon);
     if (notifState() !== 'granted') return;
-    const al = computeAlerts().filter(a => a.kind === 'soon');
-    if (!al.length) return;
-    if (!force && S.get('lastNotif', '') === todayStr()) return;
-    const body = al.length === 1 ? `${al[0].c.brand} expire ${al[0].dl === 0 ? "aujourd'hui" : 'dans ' + al[0].dl + ' j'}.` : `${al.length} cartes arrivent bientôt à expiration.`;
+    const m = KadoReminders.message(due);
+    if (!m) return;
     try {
       const reg = await navigator.serviceWorker.ready;
-      await reg.showNotification('Kado', { body, icon: './icons/icon-192.png', badge: './icons/icon-192.png', tag: 'kado-expiry' });
-      S.set('lastNotif', todayStr());
+      await reg.showNotification(m.title, KadoReminders.options(m));
+      await dbPut('meta', { k: 'notified', v: notified });
     } catch { /* ignore */ }
+  }
+  async function testNotification() {
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      await reg.showNotification('Kado', { body: 'Les rappels fonctionnent.', icon: './icons/icon-192.png', badge: './icons/icon-192.png', tag: 'kado-test' });
+    } catch { toast("Impossible d'afficher la notification"); }
+  }
+  /* Vérification en arrière-plan : granted / prompt / denied, ou indispo (Chrome Android, appli installée seulement). */
+  async function bgState() {
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      if (!('periodicSync' in reg)) return 'indispo';
+      return (await navigator.permissions.query({ name: 'periodic-background-sync' })).state;
+    } catch { return 'indispo'; }
   }
   async function exportData() {
     const data = { app: 'kado', version: 1, exportedAt: new Date().toISOString(), cards, stores: S.get('stores', []), settings: { name: S.get('name', 'Toi'), alertDays: alertDays() } };
@@ -841,14 +922,17 @@
   function openSettings() {
     const el = openPage('');
     el._render = async () => {
-      const ns = notifState(), pers = await persistState();
+      const ns = notifState(), pers = await persistState(), bg = ns === 'granted' ? await bgState() : 'indispo';
       el.innerHTML = `<div class="bar-top"><button class="round" data-act="back" aria-label="Retour">${ic('back')}</button><h1>Réglages</h1><span class="round ph"></span></div>
-        <div class="block"><h3>Apparence</h3><div class="seg" style="margin:0">${[['auto', 'Auto'], ['light', 'Clair'], ['dark', 'Sombre']].map(([k, l]) => `<button class="${themeMode() === k ? 'on' : ''}" data-act="thememode" data-m="${k}">${l}</button>`).join('')}</div><p class="note" style="margin:10px 0 0">Auto suit le thème de ton téléphone.</p></div>
+        <div class="block"><h3>Apparence</h3><div class="seg" style="margin:0">${[['auto', 'Auto'], ['light', 'Clair'], ['dark', 'Sombre']].map(([k, l]) => `<button class="${themeMode() === k ? 'on' : ''}" data-act="thememode" data-m="${k}">${l}</button>`).join('')}</div><p class="note" style="margin:10px 0 0">Auto suit le thème de ton téléphone.</p>
+          <h3 style="margin-top:18px">Liste des cartes</h3><div class="seg" style="margin:0">${[['comfort', 'Confortable'], ['compact', 'Compact']].map(([k, l]) => `<button class="${(compact() ? 'compact' : 'comfort') === k ? 'on' : ''}" data-act="density" data-m="${k}">${l}</button>`).join('')}</div></div>
         <div class="block"><label class="f"><span>Prénom affiché</span><input id="nm" value="${esc(S.get('name', 'Toi'))}" autocomplete="off"></label>
           <label class="f" style="margin:0"><span>Alerter avant l'expiration</span><select id="ad">${[7, 15, 30, 60, 90].map(n => `<option value="${n}" ${alertDays() === n ? 'selected' : ''}>${n} jours avant</option>`).join('')}</select></label></div>
         <div class="block"><h3>Rappels</h3>
-          <p class="note" style="margin:0 0 12px">${ns === 'granted' ? 'Les rappels sont activés. Tu es prévenu à l\'ouverture de Kado, et en arrière-plan quand Android le permet (appli installée).' : ns === 'denied' ? 'Les notifications sont bloquées pour Kado : autorise-les dans les réglages du site dans Chrome.' : ns === 'indispo' ? 'Les notifications ne sont pas disponibles sur ce navigateur.' : 'Active les notifications pour être prévenu avant qu\'une carte n\'expire.'}</p>
-          ${ns === 'default' ? '<button class="btn full" data-act="notif">Activer les rappels</button>' : ''}</div>
+          <p class="note" style="margin:0 0 12px">${ns === 'granted' ? 'Les rappels sont activés : tu es prévenu une fois à chaque étape (' + KadoReminders.stagesFor(alertDays()).map(d => d === 0 ? 'le jour même' : d + ' j').join(', ') + ' avant l\'expiration).' : ns === 'denied' ? 'Les notifications sont bloquées pour Kado : autorise-les dans les réglages du site dans Chrome.' : ns === 'indispo' ? 'Les notifications ne sont pas disponibles sur ce navigateur.' : 'Active les notifications pour être prévenu avant qu\'une carte n\'expire.'}</p>
+          ${ns === 'granted' ? `<p class="note" style="margin:0 0 12px">${bg === 'granted' ? 'Vérification en arrière-plan active : Android la lance de lui-même, environ deux fois par jour.' : 'Vérification en arrière-plan indisponible ici : les rappels sont calculés à chaque ouverture de Kado, et un point sur l\'icône de l\'appli signale alors les cartes à surveiller.'}</p>` : ''}
+          ${ns === 'default' ? '<button class="btn full" data-act="notif">Activer les rappels</button>' : ''}
+          ${ns === 'granted' ? '<button class="btn ghost full" data-act="testnotif">Envoyer une notification de test</button>' : ''}</div>
         <div class="block"><h3>Données</h3>
           <p class="note" style="margin:0 0 12px">Tout reste sur ce téléphone. Exporte régulièrement une sauvegarde pour ne rien perdre en cas de changement de téléphone ou d'effacement des données du navigateur.${S.get('lastBackup', '') ? ' Dernière sauvegarde : ' + fmtDate(S.get('lastBackup', '')) + '.' : ''}</p>
           <div style="display:flex;gap:8px"><button class="btn full" data-act="export">Exporter</button><button class="btn ghost full" data-act="import">Importer</button></div>
@@ -865,8 +949,10 @@
     el.addEventListener('click', async e => {
       const b = e.target.closest('[data-act]'); if (!b) return;
       if (b.dataset.act === 'back') closePage();
+      if (b.dataset.act === 'density') { S.set('density', b.dataset.m); applyDensity(); renderHome(); el._render(); }
       if (b.dataset.act === 'thememode') { S.set('theme', b.dataset.m); applyTheme(); renderHome(); el._render(); }
       if (b.dataset.act === 'notif') { await enableReminders(); el._render(); }
+      if (b.dataset.act === 'testnotif') testNotification();
       if (b.dataset.act === 'export') exportData();
       if (b.dataset.act === 'import') $('#imp', el).click();
     });
@@ -883,6 +969,8 @@
       case 'buy': openBuy(); break;
       case 'alerts': openAlerts(); break;
       case 'settings': openSettings(); break;
+      case 'density': S.set('density', compact() ? 'comfort' : 'compact'); applyDensity(); renderHome(); break;
+      case 'stats': openStats(); break;
       case 'hero': ui.hero = ui.hero ? 0 : 1; renderHome(); break;
       case 'sort': ui.sort = b.dataset.k; renderHome(); break;
       case 'archive': ui.archive = !ui.archive; renderHome(); break;
@@ -917,9 +1005,24 @@
     else formPage(null, { file: files[0] || null, text });
   }
 
+  /* ---------- Ouverture depuis une notification (?card=ID ou ?alerts=1) ---------- */
+  function openFromUrl(u) {
+    const p = new URL(u, location.href).searchParams;
+    if (!p.has('card') && !p.has('alerts')) return;
+    while (pages.length) closePage();
+    if (p.has('card') && cards.some(c => c.id === p.get('card'))) openDetail(p.get('card'));
+    else openAlerts();
+  }
+  function handleDeepLink() {
+    if (!/[?&](card|alerts)=/.test(location.search)) return;
+    const u = location.href;
+    history.replaceState(null, '', location.pathname);
+    openFromUrl(u);
+  }
+
   /* ---------- Démarrage ---------- */
   async function init() {
-    applyTheme();
+    applyTheme(); applyDensity();
     db = await openDB();
     if (!db) toast('Stockage indisponible : les cartes ne seront pas conservées');
     cards = await dbAll('cards');
@@ -930,6 +1033,9 @@
       try { await navigator.serviceWorker.register('./sw.js'); } catch { /* http / file */ }
     }
     handleShare();
+    handleDeepLink();
+    if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', e => { if (e.data && e.data.kado === 'open') openFromUrl(e.data.url); });
+    syncBadge();
     notifyIfNeeded(false);
     if (notifState() === 'granted') registerPeriodic();
     document.addEventListener('visibilitychange', () => { if (!document.hidden) { renderHome(); notifyIfNeeded(false); } });
