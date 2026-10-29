@@ -23,17 +23,106 @@
   }));
 
   /* ---------- Connaissances (enseignes, préfixes) ---------- */
-  const KNOWN = [
-    ['IKEA', 'Maison'], ['Leroy Merlin', 'Bricolage'], ['Castorama', 'Bricolage'], ['Brico Dépôt', 'Bricolage'], ['Bricorama', 'Bricolage'],
-    ['Carrefour', 'Courses'], ['Auchan', 'Courses'], ['Leclerc', 'Courses'], ['Decathlon', 'Sport'], ['Intersport', 'Sport'], ['Nike', 'Sport'],
-    ['Amazon', 'Multi'], ['Cdiscount', 'Multi'], ['Fnac', 'Culture'], ['Cultura', 'Culture'], ['Darty', 'High-tech'], ['Boulanger', 'High-tech'],
-    ['Sephora', 'Beauté'], ['Zalando', 'Mode'], ['Kiabi', 'Mode'], ['Galeries Lafayette', 'Mode'], ['Maisons du Monde', 'Maison'], ['Conforama', 'Maison'],
-    ['Truffaut', 'Jardin'], ['Botanic', 'Jardin'], ['Jardiland', 'Jardin']
+  // [nom, catégorie, alias séparés par « | », 's']. Les alias couvrent les graphies et domaines courants.
+  // 's' = nom courant du français (« Action », « But »…) : reconnu seulement dans un titre « Bon d'achat X » ou une adresse web.
+  const BRAND_TABLE = [
+    ['Carrefour', 'Courses'], ['Leclerc', 'Courses', 'e leclerc|eleclerc'], ['Auchan', 'Courses'], ['Intermarché', 'Courses'], ['Lidl', 'Courses'],
+    ['Monoprix', 'Courses'], ['Franprix', 'Courses'], ['Casino', 'Courses', '', 's'], ['Cora', 'Courses', '', 's'], ['Super U', 'Courses', 'hyper u|systeme u|u express'],
+    ['Picard', 'Courses', '', 's'], ['Grand Frais', 'Courses'], ['Biocoop', 'Courses'], ['Aldi', 'Courses'], ['Netto', 'Courses'], ['Match', 'Courses', '', 's'], ['Leader Price', 'Courses'],
+    ['IKEA', 'Maison'], ['Maisons du Monde', 'Maison'], ['Conforama', 'Maison'], ['But', 'Maison', '', 's'], ['Gifi', 'Maison'], ['Action', 'Maison', '', 's'],
+    ['La Foir\'Fouille', 'Maison', 'foir fouille|foirfouille'], ['Alinéa', 'Maison'], ['Habitat', 'Maison', '', 's'], ['La Redoute', 'Mode', 'redoute'],
+    ['Leroy Merlin', 'Bricolage'], ['Castorama', 'Bricolage'], ['Brico Dépôt', 'Bricolage', 'bricodepot'], ['Bricorama', 'Bricolage'], ['Bricomarché', 'Bricolage'],
+    ['Mr Bricolage', 'Bricolage', 'monsieur bricolage'], ['Lapeyre', 'Bricolage'], ['Point P', 'Bricolage', 'pointp', 's'], ['Weldom', 'Bricolage'],
+    ['Truffaut', 'Jardin'], ['Botanic', 'Jardin'], ['Jardiland', 'Jardin'], ['Gamm Vert', 'Jardin'],
+    ['Decathlon', 'Sport'], ['Intersport', 'Sport'], ['Go Sport', 'Sport', 'gosport'], ['Courir', 'Sport', '', 's'], ['JD Sports', 'Sport', 'jd sport|jdsports'],
+    ['Nike', 'Sport'], ['Adidas', 'Sport'], ['Foot Locker', 'Sport', 'footlocker'], ['Sport 2000', 'Sport'],
+    ['Amazon', 'Multi'], ['Cdiscount', 'Multi'], ['Rakuten', 'Multi'], ['eBay', 'Multi'], ['Veepee', 'Multi', 'vente privee'], ['Cadhoc', 'Multi', 'up cadhoc'], ['Kadéos', 'Multi', 'kadeos'], ['Illicado', 'Multi'],
+    ['Fnac', 'Culture'], ['Cultura', 'Culture'], ['Relay', 'Culture'], ['Micromania', 'Culture'], ['Gibert', 'Culture', 'gibert joseph'], ['Decitre', 'Culture'], ['Furet du Nord', 'Culture'],
+    ['UGC', 'Loisirs'], ['Pathé', 'Loisirs', 'cinemas pathe|pathe gaumont'], ['Gaumont', 'Loisirs'], ['CGR', 'Loisirs', 'cgr cinemas'],
+    ['Darty', 'High-tech'], ['Boulanger', 'High-tech'], ['LDLC', 'High-tech'], ['Materiel.net', 'High-tech'], ['Apple', 'High-tech', 'itunes|app store'],
+    ['Sephora', 'Beauté'], ['Nocibé', 'Beauté'], ['Marionnaud', 'Beauté'], ['Douglas', 'Beauté'], ['Yves Rocher', 'Beauté'], ['L\'Occitane', 'Beauté'],
+    ['Zalando', 'Mode'], ['Kiabi', 'Mode'], ['Galeries Lafayette', 'Mode', 'lafayette'], ['Printemps', 'Mode', '', 's'], ['H&M', 'Mode', '', 's'], ['Zara', 'Mode'],
+    ['Uniqlo', 'Mode'], ['Celio', 'Mode'], ['Jules', 'Mode', '', 's'], ['Etam', 'Mode'], ['Undiz', 'Mode'], ['Camaïeu', 'Mode'], ['Promod', 'Mode'], ['Pimkie', 'Mode'],
+    ['Bonobo', 'Mode'], ['Spartoo', 'Mode'], ['Lacoste', 'Mode'], ['Levi\'s', 'Mode'], ['Shein', 'Mode'],
+    ['JouéClub', 'Jouets', 'joue club'], ['King Jouet', 'Jouets'], ['La Grande Récré', 'Jouets', 'grande recre'], ['Smyths Toys', 'Jouets', 'smyths'], ['Oxybul', 'Jouets'], ['LEGO', 'Jouets'],
+    ['Wonderbox', 'Loisirs'], ['Smartbox', 'Loisirs'], ['Ticketmaster', 'Loisirs'], ['Netflix', 'Loisirs'], ['Spotify', 'Loisirs'], ['Steam', 'Loisirs', '', 's'],
+    ['PlayStation', 'Loisirs', 'psn'], ['Xbox', 'Loisirs'], ['Nintendo', 'Loisirs'], ['Google Play', 'Loisirs'],
+    ['SNCF', 'Voyage', 'sncf connect|oui sncf'], ['Air France', 'Voyage'], ['Booking', 'Voyage', '', 's'], ['Airbnb', 'Voyage'],
+    ['Norauto', 'Auto'], ['Feu Vert', 'Auto'], ['Midas', 'Auto'], ['Speedy', 'Auto', '', 's'],
+    ['McDonald\'s', 'Restaurant', 'mc donalds'], ['Burger King', 'Restaurant'], ['Quick', 'Restaurant', '', 's'], ['KFC', 'Restaurant'], ['Domino\'s', 'Restaurant', 'dominos pizza'],
+    ['Pizza Hut', 'Restaurant'], ['Starbucks', 'Restaurant'], ['Uber Eats', 'Restaurant'], ['Deliveroo', 'Restaurant'], ['Just Eat', 'Restaurant'],
+    ['Zooplus', 'Animaux'], ['Maxi Zoo', 'Animaux'], ['Animalis', 'Animaux']
   ];
+  const KNOWN = BRAND_TABLE.map(([n, c]) => [n, c]);
   const SEED_BINS = { '503200': 'Carrefour', '627598': 'IKEA', '945001': 'Leroy Merlin', '700001': 'Decathlon' };
   const norm = s => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-  const canon = name => { const n = norm(name).trim(); const k = KNOWN.find(([b]) => norm(b) === n); return k ? k[0] : null; };
+  const squash = s => norm(s).replace(/[^a-z0-9]/g, '');
+
+  // Index : forme « compactée » (sans accents, espaces ni ponctuation) -> nom de l'enseigne
+  const FREE = new Map(), STRICT = new Map(), ANY = new Map(), FUZZ = [];
+  for (const [name, , alias = '', opt = ''] of BRAND_TABLE) {
+    for (const k of [name, ...alias.split('|')].filter(Boolean).map(squash)) {
+      ANY.set(k, name);
+      (opt === 's' ? STRICT : FREE).set(k, name);
+      if (opt !== 's' && k.length >= 8) FUZZ.push([k, name]); // le flou n'a de sens que sur les noms assez longs
+    }
+  }
+  // Distance d'édition bornée : tolère les erreurs de l'OCR (« Leroy Merlln », « Carrefoun »)
+  function within(a, b, max) {
+    if (Math.abs(a.length - b.length) > max) return false;
+    let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+    for (let i = 1; i <= a.length; i++) {
+      const cur = [i];
+      for (let j = 1; j <= b.length; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      prev = cur;
+    }
+    return prev[b.length] <= max;
+  }
+  function fuzzyBrand(g) {
+    if (g.length < 8) return null;
+    const max = g.length >= 11 ? 2 : 1;
+    for (const [k, name] of FUZZ) if (k[0] === g[0] && within(g, k, max)) return name;
+    return null;
+  }
+  const canon = name => { const g = squash(name); return ANY.get(g) || fuzzyBrand(g) || null; };
   const categoryOf = brand => { const k = KNOWN.find(([b]) => b === brand); return k ? k[1] : ''; };
+
+  /* Enseigne la plus probable dans un texte. `entries` : [{ text, w }] où w pondère l'importance
+     (titre, gros caractères…). Cherche les noms par groupes de 1 à 3 mots (exact d'abord, flou ensuite),
+     et les adresses web pour les noms courants. */
+  function detectBrand(entries) {
+    const score = new Map();
+    const add = (b, v) => score.set(b, (score.get(b) || 0) + v);
+    for (const { text, w = 1 } of entries) {
+      const n = norm(text);
+      for (const m of n.matchAll(/([a-z0-9-]{3,})\.(?:fr|com|net|eu|org)\b/g)) { const b = STRICT.get(m[1].replace(/-/g, '')); if (b) add(b, 1.5 * w); }
+      const toks = n.match(/[a-z0-9]+/g) || [];
+      for (let i = 0; i < toks.length;) {
+        const room = Math.min(3, toks.length - i);
+        let step = 1, hit = null, v = 1;
+        for (let k = room; k >= 1 && !hit; k--) { const b = FREE.get(toks.slice(i, i + k).join('')); if (b) { hit = b; step = k; } }
+        for (let k = Math.min(room, 2); k >= 1 && !hit; k--) { const b = fuzzyBrand(toks.slice(i, i + k).join('')); if (b) { hit = b; step = k; v = 0.6; } }
+        if (hit) add(hit, v * w);
+        i += step;
+      }
+    }
+    let best = null, bs = 0;
+    for (const [b, sc] of score) if (sc > bs) { best = b; bs = sc; }
+    return best ? { brand: best, score: bs } : null;
+  }
+
+  /* « Bon d'achat X », « Carte cadeau X », « Chèque cadeau X » -> X (nom connu, sinon tel qu'écrit) */
+  const TITLE_RE = /(?:^|\s)(?:e[- ]?)?(?:bons?\s+d['’]achat|cartes?\s+cadeaux?|ch[eè]ques?\s+cadeaux?|bons?\s+cadeaux?)\s+(.{2,40})$/i;
+  const NOT_A_NAME = /^(?:d['’]|de\b|du\b|des\b|pour\b|valable|est\b|sera\b|une?\b|[àa]\s|en\b|chez\b|offert|ci-)/i;
+  function titleBrand(s) {
+    const m = String(s || '').trim().match(TITLE_RE); if (!m) return '';
+    const name = m[1].replace(/\s*\d+[.,]?\d*\s*(?:€|eur).*$/i, '').replace(/\s+/g, ' ').trim();
+    if (!name || NOT_A_NAME.test(name)) return '';
+    const known = canon(name);
+    if (known) return known;
+    return /^[A-ZÉÈÀ0-9]/.test(name) && /[A-Za-zÀ-ÿ]{2}/.test(name) ? name : '';
+  }
+  const binBrand = number => { const d = String(number || '').replace(/\D/g, ''); return d.length >= 8 ? (Object.assign({}, SEED_BINS, readBins())[d.slice(0, 6)] || '') : ''; };
 
   const FMT = {
     Code128: 'code_128', QRCode: 'qr_code', MicroQRCode: 'qr_code', EAN13: 'ean_13', 'EAN-13': 'ean_13', EAN8: 'ean_8', 'EAN-8': 'ean_8',
@@ -121,7 +210,7 @@
     const doc = await pdfjs.getDocument({ data, isEvalSupported: false }).promise;
     const cards = [], warnings = [];
     let fullText = '';
-    const rawItems = [];
+    const pageEntries = {}, pageTitle = {};
     const SCALE = 2.2;
 
     for (let p = 1; p <= doc.numPages; p++) {
@@ -140,7 +229,10 @@
         const h = Math.max(4, (i.height || Math.abs(i.transform[3]) || 10) * SCALE);
         return { s: i.str.trim(), x, y, w: (i.width || 0) * SCALE, h };
       });
-      items.forEach(i => rawItems.push(i.s));
+      // Importance du texte pour la détection de l'enseigne : gros caractères (x3) ou haut de page (x2)
+      const hs = items.map(i => i.h).sort((a, b) => a - b), med = hs[hs.length >> 1] || 10;
+      pageEntries[p] = items.map(i => ({ text: i.s, w: i.h >= med * 1.35 ? 3 : i.y < canvas.height * 0.22 ? 2 : 1 }));
+      for (const i of items) { const t = titleBrand(i.s); if (t) { pageTitle[p] = t; break; } }
       const lines = toLines(items);
       fullText += lines.map(l => l.text).join('\n') + '\n';
       const pg = parsePage(lines, items);
@@ -203,24 +295,14 @@
       });
     }
 
-    // Enseigne : titre « Bons d'achat X » (élément de texte), sinon nom connu le plus cité, sinon préfixe du numéro
-    let brand = '';
-    for (const t of rawItems) {
-      const m = t.match(/^bons?\s+d['’]achat\s+(.{2,40})$/i);
-      if (m) { const name = m[1].replace(/\s*\d+\s*€.*$/, '').replace(/\s+/g, ' ').trim(); if (name) { brand = canon(name) || name; break; } }
-    }
-    if (!brand) {
-      const n = norm(fullText);
-      let best = 0;
-      for (const [b] of KNOWN) {
-        const re = new RegExp('(^|[^a-z])' + norm(b).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![a-z])', 'g');
-        const c = (n.match(re) || []).length;
-        if (c > best) { best = c; brand = b; }
-      }
-    }
-    const bins = Object.assign({}, SEED_BINS, readBins());
+    // Enseigne, par ordre de fiabilité : titre de la page, titre du document, nom le plus visible de la page,
+    // nom le plus visible du document, préfixe du numéro (appris ou connu). Un PDF peut mélanger plusieurs enseignes.
+    const docTitle = Object.keys(pageTitle).map(Number).sort((a, b) => a - b).map(k => pageTitle[k])[0] || '';
+    const docBest = (detectBrand(Object.values(pageEntries).flat()) || {}).brand || '';
+    const pageBest = {};
     for (const c of cards) {
-      c.brand = brand || bins[c.number.slice(0, 6)] || '';
+      if (!(c.page in pageBest)) pageBest[c.page] = (detectBrand(pageEntries[c.page] || []) || {}).brand || '';
+      c.brand = pageTitle[c.page] || docTitle || pageBest[c.page] || docBest || binBrand(c.number);
       c.category = categoryOf(c.brand);
       c.file = file.name;
     }
@@ -281,13 +363,8 @@
       arr.forEach(v => { cnt[v] = (cnt[v] || 0) + 1; });
       out.amount = arr.sort((a, b) => cnt[b] - cnt[a] || a - b)[0];
     }
-    // Enseigne : nom connu le plus cité, ou « Bon d'achat X »
-    const nt = norm(text); let best = 0;
-    for (const [b] of KNOWN) {
-      const re = new RegExp('(^|[^a-z])' + norm(b).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![a-z])', 'g');
-      const c = (nt.match(re) || []).length; if (c > best) { best = c; out.brand = b; }
-    }
-    if (!out.brand) { const m = text.match(/bons?\s+d['’]achat\s+([A-ZÉ][\w'’ éèêàç\-]{1,30})/i); if (m) out.brand = canon(m[1].trim()) || m[1].trim(); }
+    // Enseigne : titre « Bon d'achat X », sinon nom reconnu (les premières lignes comptent double)
+    out.brand = lines.map(titleBrand).find(Boolean) || (detectBrand(lines.map((l, i) => ({ text: l, w: i < 3 ? 2 : 1 }))) || {}).brand || '';
     out.category = categoryOf(out.brand);
     return out;
   }
@@ -322,6 +399,7 @@
 
     Object.assign(res, parseOcr(res.text));
     if (!res.number && res.code && /^\d{12,25}$/.test(res.code.value)) res.number = res.code.value;
+    if (!res.brand) { res.brand = binBrand(res.number || (res.code && res.code.value)); res.category = categoryOf(res.brand); }
     return res;
   }
 
@@ -331,5 +409,5 @@
     try { const b = readBins(); b[number.slice(0, 6)] = brand; localStorage.setItem('kado:bins', JSON.stringify(b)); } catch { /* ignore */ }
   }
 
-  window.KadoPDF = { extract, extractImage, parseOcr, rememberBin, KNOWN };
+  window.KadoPDF = { extract, extractImage, parseOcr, rememberBin, detectBrand, titleBrand, canon, KNOWN };
 })();

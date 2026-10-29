@@ -1,9 +1,11 @@
 /* Kado — service worker : hors-ligne, cible de partage, rappel d'expiration */
-const VERSION = 'kado-v6';
+importScripts('./js/reminders.js');
+
+const VERSION = 'kado-v7';
 const SHARE_CACHE = 'kado-share';
 const CORE = [
   './', './index.html', './manifest.webmanifest',
-  './css/style.css', './js/app.js',
+  './css/style.css', './js/app.js', './js/reminders.js',
   './vendor/JsBarcode.all.min.js', './vendor/qrcode.js', './js/pdfimport.js',
   './vendor/pdfjs/pdf.min.js', './vendor/pdfjs/pdf.worker.min.js', './vendor/zxing/reader.iife.js', './vendor/zxing/zxing_reader.wasm',
   './fonts/dm-serif-display-latin-400-normal.woff2', './fonts/manrope-latin-wght-normal.woff2',
@@ -95,24 +97,14 @@ const idbPut = (db, store, val) => new Promise(res => {
 async function checkExpiry() {
   const db = await idb();
   const days = ((await idbGet(db, 'meta', 'alertDays')) || { v: 30 }).v;
-  const last = (await idbGet(db, 'meta', 'lastNotif')) || {};
-  const d0 = new Date(); d0.setHours(0, 0, 0, 0);
-  const today = d0.toISOString().slice(0, 10) + '|' + d0.getDate();
-  if (last.v === today) return;
+  const notified = ((await idbGet(db, 'meta', 'notified')) || { v: {} }).v;
   const cards = await idbAll(db, 'cards');
-  let n = 0, lost = 0;
-  for (const c of cards) {
-    if (c.archived || !c.expiry) continue;
-    const left = Math.round((new Date(c.expiry + 'T00:00:00') - d0) / 864e5);
-    const hasValue = c.kind === 'fidelite' || (c.balance || 0) > 0.004;
-    if (hasValue && left >= 0 && left <= days) n++;
-  }
-  if (!n) return;
-  await self.registration.showNotification('Kado', {
-    body: n === 1 ? '1 carte arrive bientôt à expiration.' : n + ' cartes arrivent bientôt à expiration.',
-    icon: './icons/icon-192.png', badge: './icons/icon-192.png', tag: 'kado-expiry'
-  });
-  await idbPut(db, 'meta', { k: 'lastNotif', v: today });
+  const { due, notified: next } = KadoReminders.plan(cards, { alertDays: days, notified });
+  const m = KadoReminders.message(due);
+  // Sans autorisation, on ne marque rien comme notifié : les rappels partiront quand elle sera donnée.
+  if (!m || self.Notification.permission !== 'granted') return;
+  await idbPut(db, 'meta', { k: 'notified', v: next });
+  await self.registration.showNotification(m.title, KadoReminders.options(m));
 }
 
 self.addEventListener('periodicsync', e => {
@@ -121,8 +113,9 @@ self.addEventListener('periodicsync', e => {
 
 self.addEventListener('notificationclick', e => {
   e.notification.close();
-  e.waitUntil(self.clients.matchAll({ type: 'window' }).then(list => {
-    if (list.length) return list[0].focus();
-    return self.clients.openWindow('./');
+  const url = new URL((e.notification.data && e.notification.data.url) || './', self.registration.scope).href;
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+    if (list.length) { list[0].postMessage({ kado: 'open', url }); return list[0].focus(); }
+    return self.clients.openWindow(url);
   }));
 });
